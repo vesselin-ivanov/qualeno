@@ -1,74 +1,85 @@
-# React + TypeScript + Vite
+# Stock Fundamentals Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A full-stack TypeScript app for exploring stock fundamentals with interactive charts.
 
-Currently, two official plugins are available:
+It supports:
+- Quarterly and annual fundamentals tabs
+- Price chart with latest close and 24h move
+- Ticker pages at `/ticker/{SYMBOL}`
+- Homepage listing companies with stored fundamentals
+- Manual fundamentals input from Google Sheets
+- Price sync from Alpha Vantage (with fallback support)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Tech Stack
 
-## React Compiler
+- Frontend: React + Vite + Recharts + Tailwind CSS
+- Backend: Express + Vite SSR
+- Database: Supabase (normalized schema)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Data Sources
 
-## Expanding the ESLint configuration
+- Fundamentals and company profile: Google Sheets tabs (`Company`, `Quarterly`, `Annual`)
+- Daily prices: Alpha Vantage (`TIME_SERIES_DAILY`, close price)
+- Optional fallback: Financial Datasets prices (if configured)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Project Structure
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- `src/App.tsx`: ticker page UI
+- `src/components/`: chart and UI components
+- `src/server/stockApi.ts`: sync logic, source parsing, DB read/write
+- `server.ts`: SSR server, `/` homepage, `/ticker/:ticker` route
+- `scripts/sync-tickers.ts`: CLI sync command
+- `supabase/`: SQL schema/migrations
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Company tab
+Required:
+- `symbol` (or `ticker`)
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Quarterly and Annual tabs
+Required:
+- `symbol` (or `ticker`)
+- `fiscalDateEnding` in `YYYY-MM-DD`
+
+## Setup
+
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Apply Supabase schema/migrations in SQL Editor:
+- `supabase/normalized_schema.sql`
+- `supabase/add_fundamentals_period_type.sql`
+- `supabase/add_company_facts.sql` (if needed in your DB)
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Run
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Development:
+```bash
+npm run dev
 ```
-# qualeno
+
+Production build:
+```bash
+npm run build
+npm run start
+```
+
+## Sync Fundamentals + Prices
+
+Sync all tickers discovered in sheets:
+```bash
+npm run sync:tickers -- --sheet-all
+```
+
+Sync specific tickers:
+```bash
+npm run sync:tickers -- --tickers NVDA,META
+```
+
+## Routes
+
+- `/` homepage with companies that have fundamentals
+- `/ticker/:ticker` ticker dashboard page
+- `/api/fundamentals?ticker=NVDA` fundamentals API
+- `/api/tickers/suggest?q=NV` ticker suggestions
+
