@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+:root {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+}
+
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus,
+.recharts-surface:focus {
+  outline: none !important;
+}
