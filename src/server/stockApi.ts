@@ -231,15 +231,11 @@ export async function listSheetTickers(): Promise<string[]> {
   }
 
   try {
-    const companyRows = await loadGoogleSheetRowsSafe(GOOGLE_SHEET_COMPANY_TAB)
     const quarterlyRows = await loadGoogleSheetRowsSafe(GOOGLE_SHEET_QUARTERLY_TAB)
-    const annualRows = await loadGoogleSheetRowsSafe(GOOGLE_SHEET_ANNUAL_TAB)
 
-    const tickers = [
-      ...companyRows.map((row) => getTickerField(row, ['symbol', 'ticker'])),
-      ...quarterlyRows.map((row) => getTickerField(row, ['symbol', 'ticker'])),
-      ...annualRows.map((row) => getTickerField(row, ['symbol', 'ticker'])),
-    ].filter(Boolean)
+    const tickers = quarterlyRows
+      .map((row) => getTickerField(row, ['symbol', 'ticker']))
+      .filter(Boolean)
 
     return Array.from(new Set(tickers)).sort((a, b) => a.localeCompare(b))
   } catch (error) {
@@ -466,7 +462,7 @@ async function loadTickerDataFromNormalizedDb(ticker: string): Promise<TickerRes
     .sort((a, b) => a.date.localeCompare(b.date)),
   )
 
-  if (dedupedQuarterlyReports.length === 0 || priceHistory.length === 0) {
+  if (dedupedQuarterlyReports.length === 0) {
     return null
   }
 
@@ -608,18 +604,17 @@ async function loadTickerDataFromGoogleSheets(ticker: string): Promise<TickerRes
           ? await loadDailyPricesFromFinancialDatasets(ticker, { 'X-API-KEY': FINANCIAL_DATASETS_API_KEY })
           : []
 
-    if (quarterlyReports.length === 0) {
+    const hasQuarterlyFundamentals = quarterlyReports.length > 0
+    if (!hasQuarterlyFundamentals) {
       console.warn(
-        `[${ticker}] No quarterly rows parsed from "${GOOGLE_SHEET_QUARTERLY_TAB}" tab. Check symbol and fiscalDateEnding format (YYYY-MM-DD).`,
+        `[${ticker}] No quarterly rows found in "${GOOGLE_SHEET_QUARTERLY_TAB}" tab. Sync will update company + price only.`,
       )
-      return null
     }
 
     if (resolvedPriceHistory.length === 0) {
       console.warn(
-        `[${ticker}] No price rows loaded from Alpha Vantage${FINANCIAL_DATASETS_API_KEY ? ' or Financial Datasets fallback' : ''}.`,
+        `[${ticker}] No price rows loaded from Alpha Vantage${FINANCIAL_DATASETS_API_KEY ? ' or Financial Datasets fallback' : ''}. Continuing with fundamentals-only sync.`,
       )
-      return null
     }
 
     const companyName =
@@ -642,10 +637,13 @@ async function loadTickerDataFromGoogleSheets(ticker: string): Promise<TickerRes
       location: getOptionalStringField(companyRow, ['location', 'headquarters', 'hq', 'country', 'city']),
       currency,
       source: 'Google Sheets + Alpha Vantage',
-      reports: quarterlyReports,
-      quarterlyReports,
-      annualReports,
+      reports: hasQuarterlyFundamentals ? quarterlyReports : [],
+      quarterlyReports: hasQuarterlyFundamentals ? quarterlyReports : [],
+      annualReports: hasQuarterlyFundamentals ? annualReports : [],
       priceHistory: resolvedPriceHistory,
+      error: hasQuarterlyFundamentals
+        ? undefined
+        : `No quarterly fundamentals found for ${ticker} in ${GOOGLE_SHEET_QUARTERLY_TAB} tab.`,
     }
   } catch (error) {
     console.error(`[${ticker}] Google Sheets sync failed:`, error)
@@ -816,12 +814,6 @@ async function loadGoogleSheetRows(tabName: string): Promise<SheetRow[]> {
       return out
     })
     .filter((row) => Object.values(row).some((v) => v.length > 0))
-
-  if (tabName === GOOGLE_SHEET_COMPANY_TAB) {
-    console.log(
-      `[stockApi] Company tab parsed headers: ${headers.filter(Boolean).join(', ') || '(none)'}`,
-    )
-  }
 
   return mapped
 }

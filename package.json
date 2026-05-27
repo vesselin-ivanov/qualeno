@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "tsx watch server.ts",
     "build": "vite build && vite build --ssr src/entry-server.tsx",
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint .",

@@ -115,7 +115,7 @@ export default function App({ initialTicker, initialData }: AppProps) {
             >
               ←
             </a>
-            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-white">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden">
               <img
                 src={`https://financialmodelingprep.com/image-stock/${encodeURIComponent(currentData.ticker)}.png`}
                 alt={`${currentData.ticker} logo`}
@@ -127,7 +127,24 @@ export default function App({ initialTicker, initialData }: AppProps) {
             </div>
             <div className="min-w-0">
               <p className="truncate text-base font-semibold text-slate-900">{currentData.companyName}</p>
-              <p className="text-xs uppercase tracking-[0.16em] text-cyan-700">{currentData.ticker} | {currentData.sector}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <p className="text-xs uppercase text-slate-900 font-semibold">{currentData.ticker}</p>
+                {currentData.industry && (
+                  <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800">
+                    {currentData.industry}
+                  </span>
+                )}
+                {currentData.category && (
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                    {currentData.category}
+                  </span>
+                )}
+                {currentData.location && (
+                  <span className="rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-800">
+                    {currentData.exchange}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

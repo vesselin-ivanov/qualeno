@@ -26,7 +26,7 @@ async function main() {
     try {
       const data = await syncTicker(ticker)
       const status = data.error ? 'partial' : 'ok'
-      console.log(`${step} ${ticker}: ${status} (${data.source})`)
+      console.log(`${step} ${ticker}: ${status}`)
       successCount += 1
     } catch (error) {
       failCount += 1
