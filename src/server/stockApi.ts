@@ -148,13 +148,14 @@ export type FundamentalsCompany = {
   companyName: string
   sector?: string
   industry?: string
+  category?: string
   logoUrl: string
   latestPrice?: number
+  marketCap?: number
   dayChange?: number
   dayChangePct?: number
 }
 
-const CACHE_TTL_HOURS = Number(process.env.SUPABASE_CACHE_TTL_HOURS ?? 24)
 const FINANCIAL_DATASETS_API_KEY = process.env.FINANCIAL_DATASETS_API_KEY
 const ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID
@@ -303,7 +304,7 @@ export async function listCompaniesWithFundamentals(): Promise<FundamentalsCompa
 
   const { data: tickerRows, error: tickerErr } = await supabase
     .from('tickers')
-    .select('id, symbol, company_name, sector, industry')
+    .select('id, symbol, company_name, sector, industry, category')
     .in('id', tickerIds)
     .order('symbol', { ascending: true })
 
@@ -315,17 +316,24 @@ export async function listCompaniesWithFundamentals(): Promise<FundamentalsCompa
     tickerRows.map((row: { id: string; symbol: string }) => [row.symbol, row.id]),
   )
 
-  const { data: pricesRows } = await supabase
-    .from('daily_prices')
-    .select('ticker_id, trading_date, close_price')
-    .in('ticker_id', tickerIds)
-    .order('ticker_id', { ascending: true })
-    .order('trading_date', { ascending: false })
+  const pricesRows = await fetchSupabaseRows<{
+    ticker_id: string
+    trading_date: string
+    close_price: number | string | null
+  }>((from, to) =>
+    supabase
+      .from('daily_prices')
+      .select('ticker_id, trading_date, close_price')
+      .in('ticker_id', tickerIds)
+      .order('ticker_id', { ascending: true })
+      .order('trading_date', { ascending: false })
+      .range(from, to),
+  )
 
   const priceByTickerId = new Map<string, { latest?: number; previous?: number }>()
-  for (const row of pricesRows ?? []) {
-    const tickerId = (row as { ticker_id: string }).ticker_id
-    const close = Number((row as { close_price: number | string | null }).close_price ?? 0)
+  for (const row of pricesRows) {
+    const tickerId = row.ticker_id
+    const close = Number(row.close_price ?? 0)
     if (!Number.isFinite(close) || close <= 0) continue
     const existing = priceByTickerId.get(tickerId)
     if (!existing) {
@@ -338,11 +346,47 @@ export async function listCompaniesWithFundamentals(): Promise<FundamentalsCompa
     }
   }
 
+  const sharesRows = await fetchSupabaseRows<{
+    ticker_id: string
+    fiscal_date_ending: string
+    shares_outstanding: number | string | null
+  }>((from, to) =>
+    supabase
+      .from('quarterly_fundamentals')
+      .select('ticker_id, fiscal_date_ending, shares_outstanding')
+      .in('ticker_id', tickerIds)
+      .not('shares_outstanding', 'is', null)
+      .order('ticker_id', { ascending: true })
+      .order('fiscal_date_ending', { ascending: false })
+      .range(from, to),
+  )
+
+  const sharesByTickerId = new Map<string, number>()
+  for (const row of sharesRows) {
+    const tickerId = row.ticker_id
+    if (sharesByTickerId.has(tickerId)) continue
+
+    const shares = Number(row.shares_outstanding ?? 0)
+    if (Number.isFinite(shares) && shares > 0) {
+      sharesByTickerId.set(tickerId, shares)
+    }
+  }
+
   return tickerRows.map(
-    (row: { id: string; symbol: string; company_name: string | null; sector: string | null; industry: string | null }) => {
+    (row: {
+      id: string
+      symbol: string
+      company_name: string | null
+      sector: string | null
+      industry: string | null
+      category: string | null
+    }) => {
       const tickerId = tickerIdBySymbol.get(row.symbol)
       const price = tickerId ? priceByTickerId.get(tickerId) : undefined
       const latestPrice = price?.latest
+      const sharesOutstanding = tickerId ? sharesByTickerId.get(tickerId) : undefined
+      const marketCap =
+        latestPrice !== undefined && sharesOutstanding !== undefined ? latestPrice * sharesOutstanding : undefined
       const previousPrice = price?.previous ?? latestPrice
       const dayChange =
         latestPrice !== undefined && previousPrice !== undefined ? latestPrice - previousPrice : undefined
@@ -356,8 +400,10 @@ export async function listCompaniesWithFundamentals(): Promise<FundamentalsCompa
       companyName: row.company_name ?? row.symbol,
       sector: row.sector ?? undefined,
       industry: row.industry ?? undefined,
+      category: row.category ?? undefined,
       logoUrl: getTickerLogoUrl(row.symbol),
       latestPrice,
+      marketCap,
       dayChange,
       dayChangePct,
       }
@@ -367,6 +413,31 @@ export async function listCompaniesWithFundamentals(): Promise<FundamentalsCompa
 
 function getTickerLogoUrl(symbol: string): string {
   return `https://financialmodelingprep.com/image-stock/${encodeURIComponent(symbol)}.png`
+}
+
+async function fetchSupabaseRows<T>(
+  buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message?: string } | null }>,
+): Promise<T[]> {
+  const pageSize = 1000
+  const rows: T[] = []
+
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await buildQuery(from, from + pageSize - 1)
+    if (error || !data || data.length === 0) {
+      if (error) {
+        console.error('[stockApi] Failed loading paginated Supabase rows:', error.message)
+      }
+      break
+    }
+
+    rows.push(...data)
+
+    if (data.length < pageSize) {
+      break
+    }
+  }
+
+  return rows
 }
 
 async function loadTickerDataFromNormalizedDb(ticker: string): Promise<TickerResponse | null> {
@@ -381,23 +452,6 @@ async function loadTickerDataFromNormalizedDb(ticker: string): Promise<TickerRes
     .maybeSingle()
 
   if (tickerErr || !tickerRow) {
-    return null
-  }
-
-  const { data: refreshRow } = await supabase
-    .from('ticker_refresh_log')
-    .select('refreshed_at')
-    .eq('ticker_id', tickerRow.id)
-    .order('refreshed_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const refreshedAt = refreshRow?.refreshed_at ? new Date(refreshRow.refreshed_at).getTime() : NaN
-  const isExpired = Number.isNaN(refreshedAt)
-    ? true
-    : Date.now() - refreshedAt > CACHE_TTL_HOURS * 60 * 60 * 1000
-
-  if (isExpired) {
     return null
   }
 

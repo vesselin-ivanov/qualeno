@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Stock Fundamentals Dashboard</title>
+    <script>
+      try {
+        const theme = localStorage.getItem('qualeno-theme')
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (theme === 'dark' || (!theme && prefersDark)) {
+          document.documentElement.classList.add('dark')
+        }
+      } catch {}
+    </script>
   </head>
   <body class="min-h-screen bg-slate-950 text-slate-100">
     <div id="root"><!--app-html--></div>

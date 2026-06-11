@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import type { ReportPeriod, TickerResponse } from './types'
 import FundamentalsCharts from './components/FundamentalsCharts'
 import MetricCard from './components/MetricCard'
+import Header from './components/Header'
 
 type AppProps = {
   initialTicker: string
@@ -19,6 +20,9 @@ export default function App({ initialTicker, initialData }: AppProps) {
   const [tickerInput, setTickerInput] = useState(initialTicker)
   const [currentData, setCurrentData] = useState(initialData)
   const [isLoading, setIsLoading] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+  )
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('quarterly')
   const [suggestions, setSuggestions] = useState<TickerSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -57,6 +61,11 @@ export default function App({ initialTicker, initialData }: AppProps) {
   const dayChange = latestPrice - previousPrice
   const dayChangePct = previousPrice !== 0 ? (dayChange / previousPrice) * 100 : 0
   const isPositiveChange = dayChange >= 0
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    window.localStorage.setItem('qualeno-theme', theme)
+  }, [theme])
 
   useEffect(() => {
     const query = tickerInput.trim()
@@ -103,7 +112,9 @@ export default function App({ initialTicker, initialData }: AppProps) {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-400 px-2 py-8 sm:px-4">
+    <>
+      <Header theme={theme} onToggleTheme={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))} />
+      <main className="mx-auto min-h-screen max-w-400 px-2 py-8 sm:px-4">
       <header className="mb-8 bg-white p-6">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -149,14 +160,14 @@ export default function App({ initialTicker, initialData }: AppProps) {
           </div>
 
           <div className="text-right">
-            <p className="text-2xl font-semibold text-slate-900">
-              {latestPrice > 0 ? `${latestPrice.toFixed(2)} ${currentData.currency}` : '--'}
-            </p>
-            <p className={`text-sm font-medium ${isPositiveChange ? 'text-green-600' : 'text-red-600'}`}>
-              {latestPrice > 0
-                ? `${isPositiveChange ? '+' : ''}${dayChange.toFixed(2)} (${isPositiveChange ? '+' : ''}${dayChangePct.toFixed(2)}%) 24h`
+              <p className="text-2xl font-semibold text-slate-900">
+                {latestPrice > 0 ? `${latestPrice.toFixed(2)} ${currentData.currency}` : '--'}
+              </p>
+              <p className={`text-sm font-medium ${isPositiveChange ? 'text-green-600' : 'text-red-600'}`}>
+                {latestPrice > 0
+                  ? `${isPositiveChange ? '+' : ''}${dayChange.toFixed(2)} (${isPositiveChange ? '+' : ''}${dayChangePct.toFixed(2)}%) 24h`
                 : '--'}
-            </p>
+              </p>
           </div>
         </div>
 
@@ -174,7 +185,6 @@ export default function App({ initialTicker, initialData }: AppProps) {
                 setShowSuggestions(true)
               }}
               onFocus={() => setShowSuggestions(true)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none ring-cyan-400/70 transition focus:ring"
               placeholder="Search ticker: AAPL, MSFT, NVDA"
               aria-label="Ticker symbol"
               autoComplete="off"
@@ -217,33 +227,6 @@ export default function App({ initialTicker, initialData }: AppProps) {
             </div>
           </div>
         </form>
-
-        <div className="mt-4 flex justify-center">
-          <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1">
-            <button
-              type="button"
-              onClick={() => setReportPeriod('quarterly')}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                reportPeriod === 'quarterly'
-                  ? 'bg-cyan-600 text-white'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              Quarterly
-            </button>
-            <button
-              type="button"
-              onClick={() => setReportPeriod('annual')}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                reportPeriod === 'annual'
-                  ? 'bg-cyan-600 text-white'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              Annual
-            </button>
-          </div>
-        </div>
       </header>
 
       {currentData.error && (
@@ -262,8 +245,9 @@ export default function App({ initialTicker, initialData }: AppProps) {
         <FundamentalsCharts chartData={chartData} priceData={priceData} currency={currentData.currency} />
       )}
 
-      <footer className="mt-8 text-xs text-slate-500">Source: {currentData.source}</footer>
-    </main>
+      <footer className="mt-8 text-xs text-slate-500">© 2026 Qualeno. All rights reserved.</footer>
+      </main>
+    </>
   )
 }
 
