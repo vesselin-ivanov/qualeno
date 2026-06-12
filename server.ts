@@ -131,9 +131,4 @@ async function createApp() {
 
   return app
 }
-
-createApp().then((app) => {
-  app.listen(port, () => {
-    console.log(`SSR server running at http://localhost:${port}`)
-  })
-})
+export default createApp
