@@ -3,7 +3,7 @@ import compression from 'compression'
 import express from 'express'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import sirv from 'sirv'
@@ -22,6 +22,10 @@ const port = Number(process.env.PORT) || 5173
 
 type Render = (args: { initialData: TickerResponse; initialTicker: string }) => string
 type RenderHomepage = (args: { companies: Awaited<ReturnType<typeof listCompaniesWithFundamentals>> }) => string
+type SsrModule = {
+  render: Render
+  renderHomepage: RenderHomepage
+}
 
 async function createApp() {
   const app = express()
@@ -40,9 +44,8 @@ async function createApp() {
     app.use(vite.middlewares)
   } else {
     template = await fs.readFile(path.resolve(__dirname, 'dist/index.html'), 'utf-8')
-    // Vite creates this file during `npm run build`; TypeScript cannot see it before build time.
-    // @ts-expect-error built SSR bundle
-    const ssrModule = await import('./dist/entry-server.js')
+    const ssrEntry = pathToFileURL(path.resolve(__dirname, 'dist/entry-server.js')).href
+    const ssrModule = (await import(ssrEntry)) as SsrModule
     prodRender = ssrModule.render
     prodRenderHomepage = ssrModule.renderHomepage
     app.use(sirv(path.resolve(__dirname, 'dist'), { extensions: [] }))
