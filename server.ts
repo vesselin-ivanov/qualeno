@@ -69,7 +69,9 @@ async function createApp() {
     const ssrModule = (await import(ssrEntry)) as SsrModule
     prodRender = ssrModule.render
     prodRenderHomepage = ssrModule.renderHomepage
-    app.use(sirv(distDir, { extensions: [] }))
+    app.use('/assets', sirv(path.resolve(distDir, 'assets'), { extensions: [] }))
+    app.get('/favicon.svg', (_req, res) => res.sendFile(path.resolve(distDir, 'favicon.svg')))
+    app.get('/icons.svg', (_req, res) => res.sendFile(path.resolve(distDir, 'icons.svg')))
   }
 
   function resolveTickerFromRequest(req: express.Request): string {

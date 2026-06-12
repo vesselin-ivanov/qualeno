@@ -5,13 +5,11 @@ import './index.css'
 
 const initialState = window.__INITIAL_STATE__
 
-if (!initialState) {
-  throw new Error('Missing initial state')
+if (initialState) {
+  hydrateRoot(
+    document.getElementById('root')!,
+    <StrictMode>
+      <App initialData={initialState.initialData} initialTicker={initialState.initialTicker} />
+    </StrictMode>,
+  )
 }
-
-hydrateRoot(
-  document.getElementById('root')!,
-  <StrictMode>
-    <App initialData={initialState.initialData} initialTicker={initialState.initialTicker} />
-  </StrictMode>,
-)
