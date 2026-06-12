@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { CustomKpiPoint, DailyPricePoint, QuarterlyReport, ReportPeriod, TickerResponse } from '../types'
+import type { CustomKpiPoint, DailyPricePoint, QuarterlyReport, ReportPeriod, TickerResponse } from '../types.js'
 
 type FinancialDatasetsEarningsResponse = {
   earnings?: Array<{
@@ -17,8 +17,11 @@ type FinancialDatasetsEarningsResponse = {
 type FinancialDatasetsIncomeResponse = {
   income_statements?: Array<{
     report_period: string
+    reportPeriod?: string
+    fiscal_date_ending?: string
     currency?: string
     revenue?: number
+    total_revenue?: number
     net_income?: number
     operating_expense?: number
     ebit?: number
@@ -26,6 +29,7 @@ type FinancialDatasetsIncomeResponse = {
     diluted_earnings_per_share?: number
     diluted_eps?: number
     shares_outstanding?: number
+    outstanding_shares?: number
     weighted_average_shares?: number
     weighted_average_shares_diluted?: number
     dividends_per_common_share?: number
@@ -44,6 +48,7 @@ type FinancialDatasetsIncomeResponse = {
     diluted_earnings_per_share?: number
     diluted_eps?: number
     shares_outstanding?: number
+    outstanding_shares?: number
     weighted_average_shares?: number
     weighted_average_shares_diluted?: number
     dividends_per_common_share?: number
@@ -53,6 +58,8 @@ type FinancialDatasetsIncomeResponse = {
 type FinancialDatasetsCashFlowResponse = {
   cash_flow_statements?: Array<{
     report_period: string
+    reportPeriod?: string
+    fiscal_date_ending?: string
     free_cash_flow?: number
   }>
   cashFlowStatements?: Array<{
@@ -66,6 +73,8 @@ type FinancialDatasetsCashFlowResponse = {
 type FinancialDatasetsBalanceSheetResponse = {
   balance_sheets?: Array<{
     report_period: string
+    reportPeriod?: string
+    fiscal_date_ending?: string
     cash_and_equivalents?: number
     total_debt?: number
     shares_outstanding?: number
@@ -734,7 +743,7 @@ async function loadTickerDataFromGoogleSheets(ticker: string): Promise<TickerRes
 
     const priceHistory = await loadDailyPricesFromAlphaVantage(ticker)
     const resolvedPriceHistory =
-      priceHistory.length > 0 && priceHistory.at(-1)?.close
+      priceHistory.length > 0 && priceHistory[priceHistory.length - 1]?.close
         ? priceHistory
         : FINANCIAL_DATASETS_API_KEY
           ? await loadDailyPricesFromFinancialDatasets(ticker, { 'X-API-KEY': FINANCIAL_DATASETS_API_KEY })

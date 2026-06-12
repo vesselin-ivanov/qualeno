@@ -4,6 +4,7 @@ import express from 'express'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import sirv from 'sirv'
 import { createServer as createViteServer, type ViteDevServer } from 'vite'
@@ -12,14 +13,15 @@ import {
   loadTickerData,
   loadTickerDataBatch,
   searchTickerSuggestions,
-  type TickerResponse,
-} from './src/server/stockApi'
+} from './src/server/stockApi.js'
+import type { TickerResponse } from './src/types.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const isProd = process.env.NODE_ENV === 'production'
 const port = Number(process.env.PORT) || 5173
 
 type Render = (args: { initialData: TickerResponse; initialTicker: string }) => string
+type RenderHomepage = (args: { companies: Awaited<ReturnType<typeof listCompaniesWithFundamentals>> }) => string
 
 async function createApp() {
   const app = express()
@@ -28,6 +30,7 @@ async function createApp() {
   let vite: ViteDevServer | undefined
   let template = ''
   let prodRender: Render | undefined
+  let prodRenderHomepage: RenderHomepage | undefined
 
   if (!isProd) {
     vite = await createViteServer({
@@ -37,7 +40,11 @@ async function createApp() {
     app.use(vite.middlewares)
   } else {
     template = await fs.readFile(path.resolve(__dirname, 'dist/index.html'), 'utf-8')
-    prodRender = (await import('./dist/entry-server.js')).render
+    // Vite creates this file during `npm run build`; TypeScript cannot see it before build time.
+    // @ts-expect-error built SSR bundle
+    const ssrModule = await import('./dist/entry-server.js')
+    prodRender = ssrModule.render
+    prodRenderHomepage = ssrModule.renderHomepage
     app.use(sirv(path.resolve(__dirname, 'dist'), { extensions: [] }))
   }
 
@@ -81,12 +88,11 @@ async function createApp() {
     let html: string
     if (!isProd && vite) {
       const module = await vite.ssrLoadModule('/src/components/Homepage.tsx')
-      const Homepage = module.default as (props: { companies: unknown[] }) => unknown
+      const Homepage = module.default as (props: { companies: unknown[] }) => ReactElement
       const markup = renderToStaticMarkup(Homepage({ companies }))
       html = await vite.transformIndexHtml('/', `<!doctype html>${markup}`)
     } else {
-      const { default: Homepage } = await import('./src/components/Homepage')
-      html = `<!doctype html>${renderToStaticMarkup(Homepage({ companies }))}`
+      html = `<!doctype html>${(prodRenderHomepage as RenderHomepage)({ companies })}`
     }
     res.status(200).set({ 'Content-Type': 'text/html' }).end(html)
   })
