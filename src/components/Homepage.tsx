@@ -88,6 +88,12 @@ export default function Homepage({ companies }: HomepageProps) {
       <body>
         <Header toggleId="theme-toggle" />
         <main>
+          <div className="page-title">
+            <div>
+              <h1>Companies by market cap</h1>
+              <p>Ranked from your cached fundamentals, latest prices, and shares outstanding.</p>
+            </div>
+          </div>
           {sortedCompanies.length > 0 ? (
             <div className="table-shell">
               <table id="companies-table">

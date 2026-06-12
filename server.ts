@@ -110,17 +110,38 @@ async function createApp() {
   })
 
   app.get('/', async (_req, res) => {
-    const companies = await listCompaniesWithFundamentals()
-    let html: string
-    if (!isProd && vite) {
-      const module = await vite.ssrLoadModule('/src/components/Homepage.tsx')
-      const Homepage = module.default as (props: { companies: unknown[] }) => ReactElement
-      const markup = renderToStaticMarkup(Homepage({ companies }))
-      html = await vite.transformIndexHtml('/', `<!doctype html>${markup}`)
-    } else {
-      html = `<!doctype html>${(prodRenderHomepage as RenderHomepage)({ companies })}`
+    try {
+      const companies = await listCompaniesWithFundamentals()
+      let html: string
+      if (!isProd && vite) {
+        const module = await vite.ssrLoadModule('/src/components/Homepage.tsx')
+        const Homepage = module.default as (props: { companies: unknown[] }) => ReactElement
+        const markup = renderToStaticMarkup(Homepage({ companies }))
+        html = await vite.transformIndexHtml('/', `<!doctype html>${markup}`)
+      } else {
+        html = `<!doctype html>${(prodRenderHomepage as RenderHomepage)({ companies })}`
+      }
+      res.status(200).set({ 'Content-Type': 'text/html' }).end(html)
+    } catch (error) {
+      if (vite) {
+        vite.ssrFixStacktrace(error as Error)
+      }
+      console.error(error)
+      res.status(500).set({ 'Content-Type': 'text/html' }).send(`
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+            <title>Qualeno</title>
+          </head>
+          <body style="font-family: sans-serif; padding: 24px;">
+            <h1>Qualeno</h1>
+            <p>Homepage data failed to load. Check the Vercel function logs for the Supabase error.</p>
+          </body>
+        </html>
+      `)
     }
-    res.status(200).set({ 'Content-Type': 'text/html' }).end(html)
   })
 
   const renderPage = async (req: express.Request, res: express.Response) => {
