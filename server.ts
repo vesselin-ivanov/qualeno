@@ -163,4 +163,13 @@ async function createApp() {
 
   return app
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  createApp().then((app) => {
+    app.listen(port, () => {
+      console.log(`Server listening at http://localhost:${port}`)
+    })
+  })
+}
+
 export default createApp
