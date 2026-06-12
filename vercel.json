@@ -1,14 +1,15 @@
 {
   "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "functions": {
     "api/index.ts": {
       "includeFiles": "api/dist/**"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "destination": "/api"
+      "src": "/(.*)",
+      "dest": "/api"
     }
   ]
 }

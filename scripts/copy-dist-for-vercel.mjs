@@ -6,4 +6,3 @@ const target = path.resolve('api/dist')
 
 await fs.rm(target, { recursive: true, force: true })
 await fs.cp(source, target, { recursive: true })
-await fs.rm(source, { recursive: true, force: true })
