@@ -50,6 +50,7 @@ Apply Supabase schema/migrations in SQL Editor:
 - `supabase/normalized_schema.sql`
 - `supabase/add_fundamentals_period_type.sql`
 - `supabase/add_company_facts.sql` (if needed in your DB)
+- `supabase/add_kpis.sql` (for custom KPI charts)
 
 ## Run
 
@@ -76,10 +77,16 @@ Sync specific tickers:
 npm run sync:tickers -- --tickers NVDA,META
 ```
 
+Custom KPI charts:
+- By default, KPI tabs are read from the main `GOOGLE_SHEET_ID` document using the ticker as the tab name, e.g. tab `AMZN`.
+- Optional: set `GOOGLE_SHEET_{TICKER}` to use a different KPI Google Sheet ID or URL for one ticker.
+- Optional: set `GOOGLE_SHEET_{TICKER}_TAB` if the KPI tab name is different from the ticker, e.g. `GOOGLE_SHEET_AMZN_TAB=Amazon KPIs`.
+- The sheet should include `fiscalDateEnding` (or `fiscalDateEdnign`) plus numeric KPI columns.
+- Run `npm run sync:tickers -- --tickers AMZN` after applying `supabase/add_kpis.sql`.
+
 ## Routes
 
 - `/` homepage with companies that have fundamentals
 - `/ticker/:ticker` ticker dashboard page
 - `/api/fundamentals?ticker=NVDA` fundamentals API
 - `/api/tickers/suggest?q=NV` ticker suggestions
-

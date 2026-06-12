@@ -39,6 +39,7 @@ export default function FundamentalsCharts({ chartData, priceData, currency }: F
   const isPositiveYtd = ytdReturn >= 0
   const priceColor = isPositiveYtd ? '#16a34a' : '#dc2626'
   const ytdLabel = `${isPositiveYtd ? '+' : ''}${ytdReturn.toFixed(2)}% YTD`
+  const hasDividends = chartData.some((point) => point.dividendsPerShare > 0)
 
   return (
     <section className="grid grid-cols-1 gap-3 lg:grid-cols-4">
@@ -160,16 +161,18 @@ export default function FundamentalsCharts({ chartData, priceData, currency }: F
         formatAsCompactNumber
       />
 
-      <BarMetricChartCard
-        title="Dividends"
-        data={chartData}
-        dataKey="dividendsPerShare"
-        color="#14b8a6"
-        legendName="Dividend"
-        currency={currency}
-        height={280}
-        formatAsMoney
-      />
+      {hasDividends && (
+        <BarMetricChartCard
+          title="Dividends"
+          data={chartData}
+          dataKey="dividendsPerShare"
+          color="#14b8a6"
+          legendName="Dividend"
+          currency={currency}
+          height={280}
+          formatAsMoney
+        />
+      )}
 
     </section>
   )

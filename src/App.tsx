@@ -4,6 +4,7 @@ import type { ReportPeriod, TickerResponse } from './types'
 import FundamentalsCharts from './components/FundamentalsCharts'
 import MetricCard from './components/MetricCard'
 import Header from './components/Header'
+import CustomKpiCharts from './components/CustomKpiCharts'
 
 type AppProps = {
   initialTicker: string
@@ -243,6 +244,10 @@ export default function App({ initialTicker, initialData }: AppProps) {
 
       {hasData && (
         <FundamentalsCharts chartData={chartData} priceData={priceData} currency={currentData.currency} />
+      )}
+
+      {currentData.customKpis && currentData.customKpis.length > 0 && (
+        <CustomKpiCharts kpis={currentData.customKpis} />
       )}
 
       <footer className="mt-8 text-xs text-slate-500">© 2026 Qualeno. All rights reserved.</footer>

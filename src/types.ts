@@ -19,6 +19,12 @@ export type DailyPricePoint = {
   close: number
 }
 
+export type CustomKpiPoint = {
+  fiscalDateEnding: string
+  metrics: Record<string, number>
+  labels: Record<string, string>
+}
+
 export type TickerResponse = {
   ticker: string
   companyName: string
@@ -33,6 +39,7 @@ export type TickerResponse = {
   quarterlyReports: QuarterlyReport[]
   annualReports: QuarterlyReport[]
   priceHistory: DailyPricePoint[]
+  customKpis?: CustomKpiPoint[]
   error?: string
 }
 

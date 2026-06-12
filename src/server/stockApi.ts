@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { DailyPricePoint, QuarterlyReport, ReportPeriod, TickerResponse } from '../types'
+import type { CustomKpiPoint, DailyPricePoint, QuarterlyReport, ReportPeriod, TickerResponse } from '../types'
 
 type FinancialDatasetsEarningsResponse = {
   earnings?: Array<{
@@ -137,6 +137,12 @@ type DbPriceRow = {
   close_price: number | string | null
 }
 
+type DbCustomKpiRow = {
+  fiscal_date_ending: string
+  metrics: Record<string, number> | string | null
+  labels: Record<string, string> | string | null
+}
+
 export type TickerSuggestion = {
   symbol: string
   companyName: string
@@ -203,6 +209,7 @@ export async function loadTickerData(rawTicker: string): Promise<TickerResponse>
     quarterlyReports: [],
     annualReports: [],
     priceHistory: [],
+    customKpis: [],
     error: `Ticker ${ticker} is not available in the database yet. Run the sync command first.`,
   }
 }
@@ -440,6 +447,74 @@ async function fetchSupabaseRows<T>(
   return rows
 }
 
+async function loadKpisFromDb(tickerId: string): Promise<CustomKpiPoint[]> {
+  if (!supabase) {
+    return []
+  }
+
+  const { data, error } = await supabase
+    .from('kpis')
+    .select('fiscal_date_ending, metrics, labels')
+    .eq('ticker_id', tickerId)
+    .order('fiscal_date_ending', { ascending: true })
+
+  if (error || !data) {
+    if (error) {
+      console.error('[stockApi] Failed loading KPI rows:', error.message)
+    }
+    return []
+  }
+
+  return data.map((row: DbCustomKpiRow) => ({
+    fiscalDateEnding: row.fiscal_date_ending,
+    metrics: parseRecord(row.metrics),
+    labels: parseStringRecord(row.labels),
+  }))
+}
+
+async function saveKpisToDb(tickerId: string, kpis: CustomKpiPoint[]): Promise<void> {
+  if (!supabase || kpis.length === 0) {
+    return
+  }
+
+  const { error } = await supabase.from('kpis').upsert(
+    kpis.map((row) => ({
+      ticker_id: tickerId,
+      fiscal_date_ending: row.fiscalDateEnding,
+      metrics: row.metrics,
+      labels: row.labels,
+    })),
+    { onConflict: 'ticker_id,fiscal_date_ending' },
+  )
+
+  if (error) {
+    console.error('[stockApi] Failed upserting KPI rows:', error.message)
+    return
+  }
+
+  console.log(`[stockApi] Saved ${kpis.length} KPI rows.`)
+}
+
+function parseRecord(value: Record<string, number> | string | null): Record<string, number> {
+  if (!value) return {}
+  const parsed = typeof value === 'string' ? JSON.parse(value) as Record<string, unknown> : value
+  return Object.fromEntries(
+    Object.entries(parsed)
+      .map(([key, raw]) => [key, Number(raw)] as const)
+      .filter(([, raw]) => Number.isFinite(raw)),
+  )
+}
+
+function parseStringRecord(value: Record<string, string> | string | null): Record<string, string> {
+  if (!value) return {}
+  const parsed = typeof value === 'string' ? JSON.parse(value) as Record<string, unknown> : value
+  return Object.fromEntries(
+    Object.entries(parsed)
+      .filter(([, raw]) => typeof raw === 'string')
+      .map(([key, raw]) => [key, raw as string]),
+  )
+}
+
 async function loadTickerDataFromNormalizedDb(ticker: string): Promise<TickerResponse | null> {
   if (!supabase) {
     return null
@@ -474,6 +549,8 @@ async function loadTickerDataFromNormalizedDb(ticker: string): Promise<TickerRes
   if (reportsErr || pricesErr) {
     return null
   }
+
+  const customKpis = await loadKpisFromDb(tickerRow.id as string)
 
   const toReport = (row: DbQuarterlyRow): QuarterlyReport => ({
     fiscalDateEnding: row.fiscal_date_ending,
@@ -534,6 +611,7 @@ async function loadTickerDataFromNormalizedDb(ticker: string): Promise<TickerRes
     quarterlyReports: dedupedQuarterlyReports,
     annualReports: dedupedAnnualReports,
     priceHistory,
+    customKpis,
   }
 }
 
@@ -617,6 +695,10 @@ async function saveTickerDataToNormalizedDb(payload: TickerResponse): Promise<vo
     )
   }
 
+  if (payload.customKpis && payload.customKpis.length > 0) {
+    await saveKpisToDb(tickerId, payload.customKpis)
+  }
+
   await supabase.from('ticker_refresh_log').insert({
     ticker_id: tickerId,
     status: payload.error ? 'partial' : 'success',
@@ -680,6 +762,7 @@ async function loadTickerDataFromGoogleSheets(ticker: string): Promise<TickerRes
         'longname',
       ]) || ticker
     const currency = getOptionalStringField(companyRow, ['currency']) || 'USD'
+    const customKpis = await loadKpisFromGoogleSheet(ticker)
 
     return {
       ticker,
@@ -695,6 +778,7 @@ async function loadTickerDataFromGoogleSheets(ticker: string): Promise<TickerRes
       quarterlyReports: hasQuarterlyFundamentals ? quarterlyReports : [],
       annualReports: hasQuarterlyFundamentals ? annualReports : [],
       priceHistory: resolvedPriceHistory,
+      customKpis,
       error: hasQuarterlyFundamentals
         ? undefined
         : `No quarterly fundamentals found for ${ticker} in ${GOOGLE_SHEET_QUARTERLY_TAB} tab.`,
@@ -826,12 +910,16 @@ async function loadTickerDataFromFinancialDatasets(
 type SheetRow = Record<string, string>
 
 async function loadGoogleSheetRows(tabName: string): Promise<SheetRow[]> {
-  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(GOOGLE_SHEET_ID ?? '')}/gviz/tq?sheet=${encodeURIComponent(tabName)}&tqx=out:json`
+  return loadGoogleSheetRowsFromSource(GOOGLE_SHEET_ID ?? '', tabName)
+}
+
+async function loadGoogleSheetRowsFromSource(sheetSource: string, tabName?: string): Promise<SheetRow[]> {
+  const url = buildGoogleSheetGvizUrl(sheetSource, tabName)
   const response = await fetch(url)
   if (!response.ok) {
     const details = await response.text().catch(() => '')
     throw new Error(
-      `Failed loading sheet tab "${tabName}" (HTTP ${response.status}). ${details.slice(0, 180)}`,
+      `Failed loading sheet${tabName ? ` tab "${tabName}"` : ''} from ${url} (HTTP ${response.status}). Check that the GOOGLE_SHEET_{TICKER} value is a valid shared/published Google Sheet ID or URL. ${details.slice(0, 180)}`,
     )
   }
 
@@ -872,6 +960,64 @@ async function loadGoogleSheetRows(tabName: string): Promise<SheetRow[]> {
   return mapped
 }
 
+function buildGoogleSheetGvizUrl(sheetSource: string, tabName?: string): string {
+  const source = sheetSource.trim()
+
+  if (/^https?:\/\//i.test(source)) {
+    const parsed = new URL(source)
+
+    if (parsed.pathname.includes('/gviz/tq')) {
+      parsed.searchParams.set('tqx', 'out:json')
+      if (tabName) {
+        parsed.searchParams.set('sheet', tabName)
+      }
+      return parsed.toString()
+    }
+
+    const publishedMatch = parsed.pathname.match(/\/spreadsheets\/d\/e\/([^/?#]+)/)
+    if (publishedMatch) {
+      return buildGvizUrl({
+        pathPrefix: 'd/e',
+        sheetId: publishedMatch[1],
+        tabName,
+        gid: parsed.searchParams.get('gid'),
+      })
+    }
+
+    const regularMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/?#]+)/)
+    if (regularMatch) {
+      return buildGvizUrl({
+        pathPrefix: 'd',
+        sheetId: regularMatch[1],
+        tabName,
+        gid: parsed.searchParams.get('gid'),
+      })
+    }
+  }
+
+  return buildGvizUrl({
+    pathPrefix: 'd',
+    sheetId: source,
+    tabName,
+  })
+}
+
+function buildGvizUrl(args: {
+  pathPrefix: 'd' | 'd/e'
+  sheetId: string
+  tabName?: string
+  gid?: string | null
+}): string {
+  const params = new URLSearchParams({ tqx: 'out:json' })
+  if (args.tabName) {
+    params.set('sheet', args.tabName)
+  } else if (args.gid) {
+    params.set('gid', args.gid)
+  }
+
+  return `https://docs.google.com/spreadsheets/${args.pathPrefix}/${encodeURIComponent(args.sheetId)}/gviz/tq?${params.toString()}`
+}
+
 async function loadGoogleSheetRowsSafe(tabName: string): Promise<SheetRow[]> {
   try {
     return await loadGoogleSheetRows(tabName)
@@ -879,6 +1025,172 @@ async function loadGoogleSheetRowsSafe(tabName: string): Promise<SheetRow[]> {
     console.error(`[stockApi] Failed loading sheet tab "${tabName}":`, error)
     return []
   }
+}
+
+async function loadKpisFromGoogleSheet(ticker: string): Promise<CustomKpiPoint[]> {
+  const sheetSource = process.env[`GOOGLE_SHEET_${ticker}`] ?? GOOGLE_SHEET_ID
+  const sheetTab = process.env[`GOOGLE_SHEET_${ticker}_TAB`] ?? ticker
+  if (!sheetSource) {
+    console.warn(
+      `[${ticker}] No KPI sheet source configured. Set GOOGLE_SHEET_ID or GOOGLE_SHEET_${ticker}. Skipping custom KPI sync.`,
+    )
+    return []
+  }
+
+  if (!isLikelyGoogleSheetSource(sheetSource)) {
+    console.warn(
+      `[${ticker}] GOOGLE_SHEET_${ticker} must be a Google Sheet ID or URL, not "${sheetSource}". Skipping custom KPI sync.`,
+    )
+    return []
+  }
+
+  try {
+    const rows = await loadGoogleSheetRowsFromSource(sheetSource, sheetTab)
+    const kpis = rows
+      .map(mapSheetRowToCustomKpi)
+      .filter((row): row is CustomKpiPoint => row !== null)
+      .sort((a, b) => a.fiscalDateEnding.localeCompare(b.fiscalDateEnding))
+    console.log(`[${ticker}] Loaded ${rows.length} KPI sheet rows; parsed ${kpis.length} KPI rows.`)
+    if (rows.length > 0 && kpis.length === 0) {
+      console.warn(
+        `[${ticker}] No KPI rows parsed. Check that the sheet has a fiscalDateEnding/fiscalDateEdnign column with YYYY-MM-DD values and at least one numeric KPI column.`,
+      )
+    }
+    return kpis
+  } catch (error) {
+    console.error(`[${ticker}] Failed loading KPI sheet:`, error)
+    return []
+  }
+}
+
+function isLikelyGoogleSheetSource(value: string): boolean {
+  const trimmed = value.trim()
+  if (/^https?:\/\/docs\.google\.com\/spreadsheets\//i.test(trimmed)) {
+    return true
+  }
+  return /^[a-zA-Z0-9_-]{20,}$/.test(trimmed)
+}
+
+function mapSheetRowToCustomKpi(row: SheetRow): CustomKpiPoint | null {
+  const fiscalDateEnding =
+    getOptionalStringField(row, [
+      'fiscalDateEnding',
+      'fiscal_date_ending',
+      'fiscalDateEdnign',
+      'fiscal_date_ednign',
+      'date',
+      'period',
+    ]) ?? ''
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fiscalDateEnding)) {
+    return null
+  }
+
+  const metrics: Record<string, number> = {}
+  const labels: Record<string, string> = {}
+  const ignoredKeys = new Set([
+    'fiscaldateending',
+    'fiscaldateednign',
+    'fiscaldate',
+    'date',
+    'period',
+    'symbol',
+    'ticker',
+  ])
+
+  for (const [key, raw] of Object.entries(row)) {
+    if (ignoredKeys.has(key) || raw.trim().length === 0) continue
+
+    const value = parseSheetNumber(raw)
+    if (value === null) continue
+
+    metrics[key] = value
+    labels[key] = formatKpiLabel(key)
+  }
+
+  if (Object.keys(metrics).length === 0) {
+    return null
+  }
+
+  return {
+    fiscalDateEnding,
+    metrics,
+    labels,
+  }
+}
+
+function parseSheetNumber(raw: string): number | null {
+  const trimmed = raw.trim()
+  const multiplier = /%$/.test(trimmed) ? 1 : 1
+  const normalized = trimmed
+    .replace(/[,$%\s]/g, '')
+    .replace(/^\((.*)\)$/, '-$1')
+  const value = Number(normalized)
+  return Number.isFinite(value) ? value * multiplier : null
+}
+
+function formatKpiLabel(key: string): string {
+  const spaced = key
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-zA-Z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-zA-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return splitCompactKpiWords(spaced)
+    .map((word) => {
+      const normalized = word.toLowerCase()
+      if (normalized === 'aws') return 'AWS'
+      return normalized.replace(/^\w/, (char) => char.toUpperCase())
+    })
+    .join(' ')
+}
+
+function splitCompactKpiWords(value: string): string[] {
+  if (value.includes(' ')) {
+    return value.split(' ').filter(Boolean)
+  }
+
+  const terms = [
+    'international',
+    'advertising',
+    'subscription',
+    'subscriptions',
+    'operating',
+    'physical',
+    'services',
+    'service',
+    'revenue',
+    'income',
+    'expense',
+    'expenses',
+    'margin',
+    'stores',
+    'store',
+    'seller',
+    'sales',
+    'north',
+    'america',
+    'third',
+    'party',
+    'online',
+    'aws',
+  ].sort((a, b) => b.length - a.length)
+  const words: string[] = []
+  let remaining = value.toLowerCase()
+
+  while (remaining.length > 0) {
+    const match = terms.find((term) => remaining.startsWith(term))
+    if (!match) {
+      words.push(remaining)
+      break
+    }
+    words.push(match)
+    remaining = remaining.slice(match.length)
+  }
+
+  return words
 }
 
 function normalizeCellValue(value: unknown): string {

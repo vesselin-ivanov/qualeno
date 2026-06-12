@@ -56,7 +56,7 @@ export default function Homepage({ companies }: HomepageProps) {
           .rank { width: 72px; color: #64748b; font-variant-numeric: tabular-nums; }
           .left, .left:visited { display: flex; align-items: center; gap: 10px; min-width: 0; color: inherit; text-decoration: none; }
           .left:hover, .left:focus { color: inherit; text-decoration: none; }
-          .logo { width: 34px; height: 34px; border-radius: 999px; border: 1px solid #e2e8f0; object-fit: contain; background: #fff; flex-shrink: 0; box-shadow: 0 5px 14px rgba(15, 23, 42, 0.08); }
+          .logo { width: 34px; height: 34px; object-fit: contain; flex-shrink: 0; }
           .text { min-width: 0; }
           .meta { color: #64748b; font-size: 12px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .market-cap { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -81,7 +81,6 @@ export default function Homepage({ companies }: HomepageProps) {
           html.dark tbody tr:hover { background: #111827; }
           html.dark .sort-btn:hover { color: #e2e8f0; }
           html.dark .sort-btn[data-active="true"]::after { color: #60a5fa; }
-          html.dark .logo { border-color: #334155; background: #fff; }
           html.dark .industry { color: #cbd5e1; }
           html.dark .empty { border-color: #334155; background: #0f172a; color: #94a3b8; }
         `}</style>

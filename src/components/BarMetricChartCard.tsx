@@ -13,11 +13,7 @@ import type { ReactNode } from 'react'
 import ChartCard from './ChartCard'
 
 type ChartPoint = {
-  quarter: string
   [key: string]: number | string
-  totalRevenue: number
-  netIncome: number
-  reportedEPS: number
 }
 
 type BarMetricChartCardProps = {
