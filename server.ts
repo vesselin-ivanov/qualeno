@@ -27,6 +27,26 @@ type SsrModule = {
   renderHomepage: RenderHomepage
 }
 
+async function resolveDistDir(): Promise<string> {
+  const candidates = [
+    path.resolve(__dirname, 'dist'),
+    path.resolve(__dirname, 'api/dist'),
+    path.resolve(process.cwd(), 'dist'),
+    path.resolve(process.cwd(), 'api/dist'),
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      await fs.access(path.join(candidate, 'index.html'))
+      return candidate
+    } catch {
+      // Try the next likely Vercel/local build location.
+    }
+  }
+
+  throw new Error(`Built dist/index.html was not found. Checked: ${candidates.join(', ')}`)
+}
+
 async function createApp() {
   const app = express()
   app.use(compression())
@@ -43,12 +63,13 @@ async function createApp() {
     })
     app.use(vite.middlewares)
   } else {
-    template = await fs.readFile(path.resolve(__dirname, 'dist/index.html'), 'utf-8')
-    const ssrEntry = pathToFileURL(path.resolve(__dirname, 'dist/entry-server.js')).href
+    const distDir = await resolveDistDir()
+    template = await fs.readFile(path.resolve(distDir, 'index.html'), 'utf-8')
+    const ssrEntry = pathToFileURL(path.resolve(distDir, 'entry-server.js')).href
     const ssrModule = (await import(ssrEntry)) as SsrModule
     prodRender = ssrModule.render
     prodRenderHomepage = ssrModule.renderHomepage
-    app.use(sirv(path.resolve(__dirname, 'dist'), { extensions: [] }))
+    app.use(sirv(distDir, { extensions: [] }))
   }
 
   function resolveTickerFromRequest(req: express.Request): string {
