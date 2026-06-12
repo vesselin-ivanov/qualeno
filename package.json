@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch server.ts",
-    "build": "vite build && vite build --ssr src/entry-server.tsx && node scripts/copy-dist-for-vercel.mjs",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --emptyOutDir false && node scripts/copy-dist-for-vercel.mjs",
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "eslint .",
     "sync:tickers": "tsx scripts/sync-tickers.ts",
